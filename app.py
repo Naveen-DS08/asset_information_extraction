@@ -13,10 +13,10 @@ st.markdown("Enter asset details to search for and extract structured informatio
 
 # Dictionary to map user-friendly names to Groq model names
 GROQ_MODELS = {
-    "Llama 3 8B": "llama3-8b-8192",
-    "Llama 3 70B": "llama3-70b-8192",
-    "Gemma 7B": "gemma-7b-it",
-    "Mixtral 8x7B": "mixtral-8x7b-32768"
+    "Llama 3 8B": "llama-3.1-8b-instant",
+    "Llama 3 70B": "llama-3.3-70b-versatile",
+    "Gemma 2 9B": "gemma2-9b-it",
+    "Qwen": "qwen/qwen3-32b"
 }
 
 # Setup sidebar for api and model configuration  
@@ -33,26 +33,54 @@ selected_model_name = st.sidebar.selectbox(
     help="Choose the large language model to use for extraction."
 )
 
+# Input method selection 
+input_method = st.radio(
+    "Choose Input method",
+    options = ["Form input", "JSON input"]
+)
+
 # Form for asset details 
 with st.form("Asset Input Form"):
     st.header("Asset Details")
-    model_number = st.text_input(
-        "Modle Number",
-        placeholder="eg., MRN85HD",
-        help= "The specific model number of the asset"
-    )
-    asset_classification_name = st.text_input(
-        "Asset Classification",
-        placeholder="e.g., Generator (Marine)",
-        help="The general classification of the asset.",
-    )
-    
-    # Optional fields to improve search
-    manufacturer = st.text_input(
-        "Manufacturer (Optional)",
-        placeholder="e.g., Cummins",
-        help="Providing the manufacturer can improve search accuracy."
-    )
+
+    # Check for the input method
+    if input_method == "Form input":
+        model_number = st.text_input(
+            "Modle Number",
+            placeholder="eg., MRN85HD",
+            help= "The specific model number of the asset"
+        )
+        asset_classification_name = st.text_input(
+            "Asset Classification",
+            placeholder="e.g., Generator (Marine)",
+            help="The general classification of the asset.",
+        )
+        
+        # Optional fields to improve search
+        manufacturer = st.text_input(
+            "Manufacturer (Optional)",
+            placeholder="e.g., Cummins",
+            help="Providing the manufacturer can improve search accuracy."
+        )
+        input_json_text = None  # Clear JSON text if form is used
+    else:
+        # use text area for JSON input with the example 
+        example_json = json.dumps(
+            {
+                "model_number": 'MRN85HD',
+                "asset_classification_name": "Generator (Marine)",
+                "Manufacturer": ""
+            }, indent=2
+        )
+        input_json_text = st.text_area(
+            "JSON input",
+            value= example_json,
+            height = 200,
+            help = "Paste JSON object with 'Model Number', 'asset_classification_name' and optional 'manufacturer'. "
+        )
+        model_number = None
+        asset_classification_name = None
+        manufacturer = None
 
     submit_button = st.form_submit_button("Extract Information")
 
@@ -60,15 +88,31 @@ with st.form("Asset Input Form"):
 if submit_button:
     if not groq_api_key:
         st.error("Please provide your Groq API key")
-    elif not model_number or not asset_classification_name:
-        st.error("Please provide both a Model Number and an Asset classification name")
     else:
-        with st.spinner("Searching and Extraction Information..."):
+        # Determine the input data based on the selected method
+        input_data = {}
+        if input_method == "Form input":
+            if not model_number or not asset_classification_name:
+                st.error("Please provide both a Model Number and an Asset Classification.")
+                st.stop()
             input_data = {
                 "model_number": model_number,
                 "asset_classification_name": asset_classification_name,
-                "manufacturer": manufacturer  
+                "manufacturer": manufacturer
             }
+        else: # JSON Input
+            try:
+                # Parse the JSON input
+                input_data = json.loads(input_json_text)
+                if not input_data.get("model_number") or not input_data.get("asset_classification_name"):
+                    st.error("The JSON object must contain 'model_number' and 'asset_classification_name' keys.")
+                    st.stop()
+            except json.JSONDecodeError:
+                st.error("Invalid JSON format. Please check your input.")
+                st.stop() 
+
+        with st.spinner("Searching and Extraction Information..."):
+            
             try:
                 # get the model name from user 
                 model_to_use = GROQ_MODELS[selected_model_name]
