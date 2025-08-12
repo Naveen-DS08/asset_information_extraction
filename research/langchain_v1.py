@@ -3,9 +3,11 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field 
 from langchain_community.tools.ddg_search.tool import DuckDuckGoSearchRun
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from ddgs import DDGS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import SimpleJsonOutputParser
+
 
 # Load environmental variable
 load_dotenv()
@@ -16,7 +18,8 @@ llm = ChatGroq(
     model="deepseek-r1-distill-llama-70b",
     temperature=0.2)
 # # Intilize the tools
-# search_tool = DuckDuckGoSearchRun()
+search_api_wrapper = DuckDuckGoSearchAPIWrapper()
+search_tool = DuckDuckGoSearchRun(api_wrapper=search_api_wrapper)
 
 # Structure for an output
 class ProductInfo(BaseModel):
@@ -60,12 +63,13 @@ def extract_asset_info(input_data):
             search_query = f"{input_data['model_number']} {input_data['asset_classification_name']}"
             # --- DEBUGGING STEP 1: Print the search query ---
             print(f"Executing search query: {search_query}")
-            search_results_list = []
-            with DDGS() as ddgs:
-                results = ddgs.text(keywords=search_query, max_results=5)
-                for r in results:
-                    search_results_list.append(f"Title: {r['title']}\nSnippet: {r['body']}\n")
-            search_results = "\n".join(search_results_list)
+            search_results = search_tool.run(search_query)
+            # search_results_list = []
+            # with DDGS() as ddgs:
+            #     results = ddgs.text(keywords=search_query, max_results=5)
+            #     for r in results:
+            #         search_results_list.append(f"Title: {r['title']}\nSnippet: {r['body']}\n")
+            # search_results = "\n".join(search_results_list)
             # --- DEBUGGING STEP 2: Print the search results ---
             print("--- SEARCH RESULTS ---")
             print(search_results)
@@ -87,6 +91,7 @@ def extract_asset_info(input_data):
 
     # 3. Fallback mechanism if all retries fail
     print("Max retries exceeded. Returning fallback response.")
+
     return {
         "asset_classification": "Generator Emissions/UREA/DPF Systems",
         "model_number": input_data["model_number"],
@@ -98,8 +103,9 @@ def extract_asset_info(input_data):
 
 
 if __name__ == "__main__":
-    extract_asset_info({
+    print("\nFinal Response\n")
+    print(extract_asset_info({
 "model_number": "MRN85HD",
 "asset_classification_name": "Generator (Marine)"
 }
-)
+))
